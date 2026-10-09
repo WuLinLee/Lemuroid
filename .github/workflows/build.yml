@@ -1,36 +1,124 @@
 name: Build Lemuroid APK
 
 on:
-  workflow_dispatch:
-  schedule:
-    - cron: '0 0 * * 0'
+workflow_dispatch:
+schedule:
+- cron: '0 0 * * 0'
 
 permissions:
-  contents: write
+contents: write
 
 jobs:
-  build:
-    runs-on: ubuntu-latest
+build:
+runs-on: ubuntu-latest
 
-    steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
-        with:
-          submodules: recursive
-          fetch-depth: 0
+steps:
+  - name: Checkout Code
+    uses: actions/checkout@v4
+    with:
+      submodules: recursive
+      fetch-depth: 0
 
-      - name: Sync Upstream & Merge PR #1064
-        shell: bash
-        run: |
-          set +e
+  - name: Setup Java
+    uses: actions/setup-java@v4
+    with:
+      distribution: temurin
+      java-version: '17'
+      cache: gradle
 
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
+  - name: Sync Upstream
+    shell: bash
+    run: |
+      set -e
 
-          echo "===> 添加官方 upstream 仓库"
-          git remote add upstream https://github.com/Swordfish-Studio/Lemuroid.git 2>/dev/null || true
+      git config user.name "github-actions[bot]"
+      git config user.email "github-actions[bot]@users.noreply.github.com"
 
-          echo "===> 获取官方最新主分支"
-          if git fetch upstream main; then
-            echo "===> 尝试合并官方主分支"
-            git merge upstream/main --no-edit ||
+      echo "===> 添加官方 upstream 仓库"
+      git remote add upstream https://github.com/Swordfish-Studio/Lemuroid.git 2>/dev/null || true
+
+      echo "===> 获取官方最新主分支"
+      git fetch upstream main
+
+      echo "===> 尝试合并官方主分支"
+      if ! git merge upstream/main --no-edit; then
+        echo "官方主分支合并失败，可能存在合并冲突。"
+        echo "请检查日志并解决冲突后重新构建。"
+        exit 1
+      fi
+
+      echo "===> 检查当前代码"
+      git log -1 --oneline
+
+  - name: Check Project Configuration
+    shell: bash
+    run: |
+      set -e
+
+      echo "===> 检查 Gradle Wrapper"
+      if [ ! -f "./gradlew" ]; then
+        echo "错误：项目根目录没有 gradlew 文件。"
+        exit 1
+      fi
+
+      chmod +x ./gradlew
+
+      echo "===> 列出 Android 构建任务"
+      ./gradlew tasks --all
+
+  - name: Build Release APK
+    shell: bash
+    run: |
+      set -e
+
+      echo "===> 开始构建 APK"
+      ./gradlew assembleRelease --no-daemon --stacktrace
+
+  - name: Find APK Files
+    id: find-apk
+    shell: bash
+    run: |
+      set -e
+
+      echo "===> 搜索构建生成的 APK"
+      mkdir -p release-apk
+
+      find . -type f -path "*/build/outputs/apk/*" -name "*.apk" \
+        -not -path "*/build/intermediates/*" \
+        -exec cp {} release-apk/ \;
+
+      if ! find release-apk -maxdepth 1 -type f -name "*.apk" | grep -q .; then
+        echo "错误：没有找到 APK 文件。"
+        echo "请检查 Gradle 构建任务及输出目录。"
+        exit 1
+      fi
+
+      echo "===> APK 文件及大小"
+      ls -lh release-apk/
+
+  - name: Upload APK Artifact
+    uses: actions/upload-artifact@v4
+    with:
+      name: Lemuroid-APK
+      path: release-apk/*.apk
+      if-no-files-found: error
+      retention-days: 14
+
+  - name: Publish GitHub Release
+    if: success()
+    uses: softprops/action-gh-release@v2
+    with:
+      tag_name: build-${{ github.run_number }}
+      name: Lemuroid Build ${{ github.run_number }}
+      body: |
+        Automated Lemuroid APK build.
+
+        Source repository: WuLinLee/Lemuroid
+        Official upstream: Swordfish-Studio/Lemuroid
+
+        Please test the APK before daily use.
+      files: release-apk/*.apk
+      fail_on_unmatched_files: true
+      make_latest: true
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
