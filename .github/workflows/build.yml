@@ -29,8 +29,8 @@ jobs:
       - name: Grant Execute Permission for Gradlew
         run: chmod +x gradlew
 
-      - name: Build Free Download Debug APK
-        run: ./gradlew assembleFreeDownloadDebug
+      - name: Build APK
+        run: ./gradlew :lemuroid-app:assembleDebug
 
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
