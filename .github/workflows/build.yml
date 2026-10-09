@@ -5,6 +5,10 @@ on:
   schedule:
     - cron: '0 0 * * 0'
 
+# 赋予 GitHub Actions 发布 Release 的写入权限
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -60,8 +64,18 @@ jobs:
       - name: Build Free Bundle Debug APK
         run: ./gradlew :lemuroid-app:assembleFreeBundleDebug
 
-      - name: Upload APK Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: Lemuroid-FreeBundle-APK
-          path: '**/build/outputs/apk/**/*.apk'
+      - name: Publish to GitHub Release (Overwrite Old)
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # 1. 删除旧的 latest Release 及对应的标签（如果存在）
+          gh release delete latest --cleanup-tag -y || true
+
+          # 2. 自动定位打包好的 APK 文件
+          APK_FILE=$(find . -type f -name "*.apk" | head -n 1)
+          echo "找到了 APK 文件: $APK_FILE"
+
+          # 3. 创建全新的 Release 并上传 APK
+          gh release create latest "$APK_FILE" \
+            --title "Lemuroid 最新自动构建版" \
+            --notes "本版本由 GitHub Actions 自动构建生成。集成官方最新代码 + PR #1064（画面位置调整）。安装前请先卸载旧版本。"
