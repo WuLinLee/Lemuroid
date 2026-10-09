@@ -11,13 +11,13 @@ pull-requests: read
 
 jobs:
 build:
+name: Build Android APK
 runs-on: ubuntu-latest
 
 steps:
   - name: Checkout Code
     uses: actions/checkout@v4
     with:
-      repository: WuLinLee/Lemuroid
       ref: master
       submodules: recursive
       fetch-depth: 0
@@ -29,70 +29,53 @@ steps:
       java-version: '17'
       cache: gradle
 
-  - name: Sync Upstream
+  - name: Sync Official Upstream
     shell: bash
     run: |
       set -e
-
       git config user.name "github-actions[bot]"
       git config user.email "github-actions[bot]@users.noreply.github.com"
-
       git remote add upstream https://github.com/Swordfish-Studio/Lemuroid.git || true
-
-      echo "Fetching official upstream..."
       git fetch upstream main
-
-      echo "Merging official upstream..."
       git merge upstream/main --no-edit
 
   - name: Merge PR #1064
     shell: bash
     run: |
       set -e
-
-      echo "Fetching PR #1064..."
       git fetch origin pull/1064/head:pr-1064
-
-      echo "Merging PR #1064..."
       git merge pr-1064 --no-edit
 
-  - name: Check Gradle Wrapper
+  - name: Prepare Gradle
     shell: bash
     run: |
       set -e
-
-      if [ ! -f "./gradlew" ]; then
-        echo "ERROR: gradlew was not found."
+      if [ ! -f gradlew ]; then
+        echo "ERROR: gradlew not found"
         exit 1
       fi
-
-      chmod +x ./gradlew
-
-  - name: Show Available Build Tasks
-    run: ./gradlew tasks --all
+      chmod +x gradlew
 
   - name: Build Release APK
     run: ./gradlew assembleRelease --no-daemon --stacktrace
 
-  - name: Collect APK Files
+  - name: Collect APK
     shell: bash
     run: |
       set -e
-
       mkdir -p release-apk
-
       find . -type f -path "*/build/outputs/apk/*" -name "*.apk" \
         -not -path "*/build/intermediates/*" \
         -exec cp {} release-apk/ \;
 
       if ! find release-apk -maxdepth 1 -name "*.apk" | grep -q .; then
-        echo "ERROR: No APK files were generated."
+        echo "ERROR: No APK found"
         exit 1
       fi
 
       ls -lh release-apk/
 
-  - name: Upload APK Artifact
+  - name: Upload APK
     uses: actions/upload-artifact@v4
     with:
       name: Lemuroid-APK
@@ -100,8 +83,7 @@ steps:
       if-no-files-found: error
       retention-days: 14
 
-  - name: Publish GitHub Release
-    if: success()
+  - name: Publish Release
     uses: softprops/action-gh-release@v2
     with:
       tag_name: build-${{ github.run_number }}
