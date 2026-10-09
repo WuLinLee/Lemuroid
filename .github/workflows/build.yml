@@ -5,7 +5,6 @@ on:
   schedule:
     - cron: '0 0 * * 0'
 
-# 赋予 GitHub Actions 发布 Release 的写入权限
 permissions:
   contents: write
 
@@ -21,61 +20,74 @@ jobs:
           fetch-depth: 0
 
       - name: Sync Upstream & Merge PR #1064
+        shell: bash
         run: |
+          set -e
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-
-          # 1. 添加官方 upstream 仓库并同步最新主分支代码
           git remote add upstream https://github.com/Swordfish-Studio/Lemuroid.git || true
-          git fetch upstream main || true
-          git merge upstream/main --no-edit || {
-            echo "⚠️ 与官方主分支同步时存在冲突，重置回本地代码继续..."
-            git merge --abort || true
-          }
 
-          # 2. 拉取并尝试自动合并 PR #1064 (画面位置调整补丁)
-          echo "===> 正在拉取 PR #1064..."
-          if git fetch upstream pull/1064/head:pr-1064; then
-            echo "===> 尝试合并 PR #1064..."
-            git merge pr-1064 --no-edit || {
-              echo "⚠️ PR #1064 与最新代码存在冲突，取消合并，保持基础代码编译。"
+          if git fetch upstream main; then
+            if ! git merge upstream/main --no-edit; then
+              echo "Upstream conflict; keeping current code."
               git merge --abort || true
-            }
-          else
-            echo "⚠️ 无法获取 PR #1064，跳过补丁合并。"
+            fi
           fi
+
+          if git fetch upstream pull/1064/head:refs/heads/pr-1064; then
+            if ! git merge pr-1064 --no-edit; then
+              echo "PR conflict; skipping PR merge."
+              git merge --abort || true
+            fi
+          fi
+
+          git log -3 --oneline
 
       - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:
           java-version: '17'
-          distribution: 'temurin'
+          distribution: temurin
 
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v3
 
       - name: Accept Android SDK Licenses
         run: |
-          yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses || true
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses || true
 
-      - name: Grant Execute Permission for Gradlew
+      - name: Grant Execute Permission
         run: chmod +x gradlew
 
-      - name: Build Free Bundle Debug APK
-        run: ./gradlew :lemuroid-app:assembleFreeBundleDebug
-
-      - name: Publish to GitHub Release (Overwrite Old)
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build Free Bundle APK
         run: |
-          # 1. 删除旧的 latest Release 及对应的标签（如果存在）
+          ./gradlew :lemuroid-app:assembleFreeBundleDebug -Pandroid.injected.build.abi=arm64-v8a --no-daemon
+
+      - name: Inspect APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK_FILE="$(find lemuroid-app/build/outputs/apk -type f -name '*.apk' | head -n 1)"
+          if [ -z "$APK_FILE" ]; then
+            echo "::error::APK not found"
+            exit 1
+          fi
+          mkdir -p output
+          cp "$APK_FILE" output/Lemuroid-FreeBundle.apk
+          du -h output/Lemuroid-FreeBundle.apk
+          unzip -Z1 output/Lemuroid-FreeBundle.apk | grep -E '^lib/[^/]+/*.so$' | cut -d/ -f2 | sort -u || true
+
+      - name: Upload APK Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Lemuroid-FreeBundle-APK
+          path: output/Lemuroid-FreeBundle.apk
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Publish to GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
           gh release delete latest --cleanup-tag -y || true
-
-          # 2. 自动定位打包好的 APK 文件
-          APK_FILE=$(find . -type f -name "*.apk" | head -n 1)
-          echo "找到了 APK 文件: $APK_FILE"
-
-          # 3. 创建全新的 Release 并上传 APK
-          gh release create latest "$APK_FILE" \
-            --title "Lemuroid 最新自动构建版" \
-            --notes "本版本由 GitHub Actions 自动构建生成。集成官方最新代码 + PR #1064（画面位置调整）。安装前请先卸载旧版本。"
+          gh release create latest output/Lemuroid-FreeBundle.apk --title "Lemuroid 最新自动构建版" --notes "自动构建版本，尝试同步上游并合并 PR #1064。"
