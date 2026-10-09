@@ -1,7 +1,9 @@
 name: Build Lemuroid APK
 
 on:
-  workflow_dispatch:
+  workflow_dispatch: # 支持在 GitHub 页面手动点击运行
+  schedule:
+    - cron: '0 0 * * 0' # 每周日 00:00 (UTC) 自动运行构建最新版本
 
 jobs:
   build:
@@ -12,6 +14,32 @@ jobs:
         uses: actions/checkout@v4
         with:
           submodules: recursive
+          fetch-depth: 0 # 获取完整历史记录以便于合并
+
+      - name: Sync Upstream & Merge PR #1064
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          # 1. 添加官方 upstream 仓库并同步最新主分支代码
+          git remote add upstream https://github.com/Devcom/Lemuroid.git || true
+          git fetch upstream main
+          git merge upstream/main --no-edit || {
+            echo "⚠️ 与官方主分支同步时存在冲突，重置回本地代码继续..."
+            git merge --abort || true
+          }
+
+          # 2. 拉取并尝试自动合并 PR #1064 (画面位置调整补丁)
+          echo "===> 正在拉取 PR #1064..."
+          if git fetch upstream pull/1064/head:pr-1064; then
+            echo "===> 尝试合并 PR #1064..."
+            git merge pr-1064 --no-edit || {
+              echo "⚠️ PR #1064 与最新代码存在冲突，取消合并，保持基础代码编译。"
+              git merge --abort || true
+            }
+          else
+            echo "⚠️ 无法获取 PR #1064，跳过补丁合并。"
+          fi
 
       - name: Set up JDK 17
         uses: actions/setup-java@v4
@@ -29,11 +57,11 @@ jobs:
       - name: Grant Execute Permission for Gradlew
         run: chmod +x gradlew
 
-      - name: Build APK
-        run: ./gradlew :lemuroid-app:assembleDebug
+      - name: Build Free Bundle Debug APK
+        run: ./gradlew :lemuroid-app:assembleFreeBundleDebug
 
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: Lemuroid-APK
+          name: Lemuroid-FreeBundle-APK
           path: '**/build/outputs/apk/**/*.apk'
