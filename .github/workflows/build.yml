@@ -1,0 +1,96 @@
+name: Build Lemuroid APK
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 0 * * 0'
+
+permissions:
+  contents: write
+  pull-requests: read
+
+jobs:
+  build:
+    name: Build Android APK
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          ref: master
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: gradle
+
+      - name: Sync Official Upstream
+        shell: bash
+        run: |
+          set -e
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git remote add upstream https://github.com/Swordfish-Studio/Lemuroid.git || true
+          git fetch upstream main
+          git merge upstream/main --no-edit
+
+      - name: Merge PR #1064
+        shell: bash
+        run: |
+          set -e
+          git fetch origin pull/1064/head:pr-1064
+          git merge pr-1064 --no-edit
+
+      - name: Prepare Gradle
+        shell: bash
+        run: |
+          set -e
+          if [ ! -f gradlew ]; then
+            echo "ERROR: gradlew not found"
+            exit 1
+          fi
+          chmod +x gradlew
+
+      - name: Build Release APK
+        shell: bash
+        run: ./gradlew assembleRelease --no-daemon --stacktrace
+
+      - name: Collect APK
+        shell: bash
+        run: |
+          set -e
+          mkdir -p release-apk
+          find . -type f -path "*/build/outputs/apk/*" -name "*.apk" \
+            -not -path "*/build/intermediates/*" \
+            -exec cp {} release-apk/ \;
+
+          if ! find release-apk -maxdepth 1 -name "*.apk" | grep -q .; then
+            echo "ERROR: No APK found"
+            exit 1
+          fi
+
+          ls -lh release-apk/
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: Lemuroid-APK
+          path: release-apk/*.apk
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Publish Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: build-${{ github.run_number }}
+          name: Lemuroid Build ${{ github.run_number }}
+          body: Automated Lemuroid APK build.
+          files: release-apk/*.apk
+          fail_on_unmatched_files: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
