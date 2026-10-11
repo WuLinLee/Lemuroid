@@ -126,21 +126,21 @@ private fun ContextActionContent(
 
     val imagePickerLauncher =
         rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.GetContent(),
-    ) { uri: Uri? ->
-        if (uri != null) {
-            try {
-                context.contentResolver.takePersistableUriPermission(
-                    uri,
-                    android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION,
-                )
-            } catch (e: SecurityException) {
-                Timber.e(e, "Failed to persist read URI permission for custom cover")
+            contract = ActivityResultContracts.GetContent(),
+        ) { uri: Uri? ->
+            if (uri != null) {
+                try {
+                    context.contentResolver.takePersistableUriPermission(
+                        uri,
+                        android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION,
+                    )
+                } catch (e: SecurityException) {
+                    Timber.e(e, "Failed to persist read URI permission for custom cover")
+                }
+                onSetCustomCoverUri(selectedGame, uri.toString())
+                selectedGameState.value = null
             }
-            onSetCustomCoverUri(selectedGame, uri.toString())
-            selectedGameState.value = null
         }
-    }
 
     Column(
         modifier =
