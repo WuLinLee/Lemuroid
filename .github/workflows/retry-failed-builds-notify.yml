@@ -66,18 +66,18 @@ jobs:
                 ? [
                     'Checkstyle failed on master because ktlint reported Kotlin source-format violations.',
                     '',
-                    \`- Workflow: \${run.name}\`,
-                    \`- Run: \${runUrl}\`,
-                    \`- Commit: \${run.head_sha || 'unknown'}\`,
+                    `- Workflow: ${run.name}`,
+                    `- Run: ${runUrl}`,
+                    `- Commit: ${run.head_sha || 'unknown'}`,
                     '',
                     'This issue is deduplicated across Checkstyle failures on master. Inspect the linked run, fix formatting when appropriate, and close this issue after the workflow passes.'
                   ].join('\n')
                 : [
                     'The workflow failed again after its automatic retry.',
                     '',
-                    \`- Workflow: \${run.name}\`,
-                    \`- Run: \${runUrl}\`,
-                    \`- Branch: \${run.head_branch || 'unknown'}\`,
+                    `- Workflow: ${run.name}`,
+                    `- Run: ${runUrl}`,
+                    `- Branch: ${run.head_branch || 'unknown'}`,
                     '',
                     'Please open the run above to inspect the error. Close this issue after the workflow succeeds or the problem is fixed.'
                   ].join('\n')
