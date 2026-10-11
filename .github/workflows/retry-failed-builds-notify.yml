@@ -4,6 +4,7 @@ on:
   workflow_run:
     workflows:
       - Build Official Lemuroid (Master)
+      - Checkstyle
     types: [completed]
 
 permissions:
@@ -12,7 +13,15 @@ permissions:
 
 jobs:
   retry-or-notify:
-    if: github.event.workflow_run.conclusion == 'failure'
+    if: >-
+      github.event.workflow_run.conclusion == 'failure' &&
+      (
+        github.event.workflow_run.name != 'Checkstyle' ||
+        (
+          github.event.workflow_run.event == 'push' &&
+          github.event.workflow_run.head_branch == 'master'
+        )
+      )
     runs-on: ubuntu-latest
     steps:
       - name: Retry once, then open a notification issue
@@ -21,10 +30,14 @@ jobs:
           script: |
             const run = context.payload.workflow_run;
             const attempt = run.run_attempt || 1;
-            const title = `Scheduled/build workflow failed: ${run.name} (run ${run.id})`;
+            const isCheckstyle = run.name === 'Checkstyle';
+            const title = isCheckstyle
+              ? 'Checkstyle failure on master (ktlint violations)'
+              : `Scheduled/build workflow failed: ${run.name} (run ${run.id})`;
             const runUrl = run.html_url;
 
-            if (attempt < 2) {
+            // KtLint failures are deterministic. Keep one open issue per master-branch problem.
+            if (!isCheckstyle && attempt < 2) {
               await github.rest.actions.reRunWorkflowFailedJobs({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
@@ -49,13 +62,23 @@ jobs:
               owner: context.repo.owner,
               repo: context.repo.repo,
               title,
-              body: [
-                'The workflow failed again after its automatic retry.',
-                '',
-                `- Workflow: ${run.name}`,
-                `- Run: ${runUrl}`,
-                `- Branch: ${run.head_branch || 'unknown'}`,
-                '',
-                'Please open the run above to inspect the error. Close this issue after the workflow succeeds or the problem is fixed.'
-              ].join('\n')
+              body: isCheckstyle
+                ? [
+                    'Checkstyle failed on master because ktlint reported Kotlin source-format violations.',
+                    '',
+                    \`- Workflow: \${run.name}\`,
+                    \`- Run: \${runUrl}\`,
+                    \`- Commit: \${run.head_sha || 'unknown'}\`,
+                    '',
+                    'This issue is deduplicated across Checkstyle failures on master. Inspect the linked run, fix formatting when appropriate, and close this issue after the workflow passes.'
+                  ].join('\n')
+                : [
+                    'The workflow failed again after its automatic retry.',
+                    '',
+                    \`- Workflow: \${run.name}\`,
+                    \`- Run: \${runUrl}\`,
+                    \`- Branch: \${run.head_branch || 'unknown'}\`,
+                    '',
+                    'Please open the run above to inspect the error. Close this issue after the workflow succeeds or the problem is fixed.'
+                  ].join('\n')
             });
