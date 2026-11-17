@@ -13,7 +13,7 @@ Unofficial, automatically built Android APKs from the latest `master` branch of 
 - [View the latest release and build information](https://github.com/WuLinLee/Lemuroid/releases/latest)
 - [Browse all workflow runs](https://github.com/WuLinLee/Lemuroid/actions/workflows/build-official-master-keep-latest.yml)
 
-The latest release includes the APK, a SHA-256 checksum file, and build metadata identifying the exact upstream commit used.
+Each new automated release includes the APK, a SHA-256 checksum file, and build metadata identifying the exact upstream commit used.
 
 ## What gets built
 
