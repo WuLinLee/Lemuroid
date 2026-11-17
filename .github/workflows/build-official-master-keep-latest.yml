@@ -65,8 +65,8 @@ jobs:
           {
             echo "## Upstream source"
             echo "- Repository: [Swordfish90/Lemuroid](https://github.com/Swordfish90/Lemuroid)"
-            echo "- Branch: `master`"
-            echo "- Commit: [`$sha`](https://github.com/Swordfish90/Lemuroid/commit/$sha)"
+            echo "- Branch: master"
+            echo "- Commit: $sha (https://github.com/Swordfish90/Lemuroid/commit/$sha)"
             echo "- Source commit date: $source_date"
             echo "- Build started: $built_at"
           } >> "$GITHUB_STEP_SUMMARY"
