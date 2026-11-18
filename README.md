@@ -36,11 +36,11 @@ Each run checks out the current upstream `master` commit, including its submodul
 - **Upstream code only:** The APK is built from `Swordfish90/Lemuroid`, not from this fork's application source. Changes made only in `WuLinLee/Lemuroid` are not included in the APK.
 - **Development version:** The build follows upstream `master`, not a stable release tag. It may contain unreleased changes or regressions.
 - **Signing key:** A temporary signing keystore is generated for each workflow run. Android therefore cannot install a new weekly APK as an in-place update over the previous CI build, and it may also reject an update over a Play Store/F-Droid installation. You may need to uninstall the previous app before installing a new build. **Back up in-app saves and other important data first**, because uninstalling an Android app can remove its local data.
-- **Latest means latest successful build:** A scheduled run that fails does not replace the currently published APK. The workflow retries a failed build once and then opens or updates a tracking issue.
+- **Latest means latest successful build:** A failed run never replaces the currently published APK. Gradle retries transient dependency/network errors up to three times; the workflow can then retry the failed job once and opens or updates a tracking issue if the build still fails. A later successful build automatically closes that tracking issue.
 
 ## Automation
 
-The workflow runs every Sunday at 03:23 UTC and can also be started manually from the Actions tab. It builds the upstream source, verifies that at least one APK was produced, creates checksum/build-info files, uploads a short-lived Actions artifact, and publishes a GitHub Release.
+The workflow runs every Sunday at 03:23 UTC and can also be started manually from the Actions tab. It shallow-checks out the upstream master branch and its submodules, builds the source, retries transient Gradle repository/network failures, verifies that at least one APK was produced, creates checksum/build-info files, uploads a short-lived Actions artifact, and publishes a GitHub Release.
 
 Only releases created by this automation are cleaned up. After a new release is published successfully, older automated build releases and their tags are removed. The newest successful APK therefore remains available from the stable **Latest Release** download link above.
 
