@@ -51,17 +51,17 @@ jobs:
               `- Branch: ${run.head_branch || 'unknown'}`,
               `- Workflow commit: ${run.head_sha || 'unknown'}`,
               '',
-              'Open the workflow run to inspect the failed step and logs. The previously published Latest Release has not been replaced.'
+              'Open the workflow run to inspect the failed step and logs. The previous successful Latest Release remains available.'
             ].join('\n');
 
-            const openIssues = await github.rest.issues.listForRepo({
+            const response = await github.rest.issues.listForRepo({
               owner,
               repo,
               state: 'open',
               per_page: 100
             });
 
-            const existing = openIssues.data.find(issue =>
+            const existing = response.data.find(issue =>
               !issue.pull_request && issue.title === title
             );
 
@@ -72,7 +72,7 @@ jobs:
                 issue_number: existing.number,
                 body: details
               });
-              core.notice(`Updated existing tracking issue #${existing.number}`);
+              core.notice(`Updated tracking issue #${existing.number}`);
             } else {
               const created = await github.rest.issues.create({
                 owner,
@@ -82,3 +82,55 @@ jobs:
               });
               core.notice(`Created tracking issue #${created.data.number}`);
             }
+
+  close-notification:
+    if: github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Close the build-failure issue after a successful release
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const run = context.payload.workflow_run;
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const title = 'Upstream APK build failed';
+
+            const response = await github.rest.issues.listForRepo({
+              owner,
+              repo,
+              state: 'open',
+              per_page: 100
+            });
+
+            const existing = response.data.find(issue =>
+              !issue.pull_request && issue.title === title
+            );
+
+            if (!existing) {
+              core.notice('No open build-failure issue to close.');
+              return;
+            }
+
+            await github.rest.issues.createComment({
+              owner,
+              repo,
+              issue_number: existing.number,
+              body: [
+                'The automated upstream APK build has succeeded.',
+                '',
+                `- Successful workflow run: ${run.html_url}`,
+                '',
+                'The latest APK is available from [Latest Release](https://github.com/${owner}/${repo}/releases/latest).'
+              ].join('\n')
+            });
+
+            await github.rest.issues.update({
+              owner,
+              repo,
+              issue_number: existing.number,
+              state: 'closed',
+              state_reason: 'completed'
+            });
+
+            core.notice(`Closed resolved build-failure issue #${existing.number}`);
