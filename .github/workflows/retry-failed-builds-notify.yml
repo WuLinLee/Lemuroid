@@ -27,8 +27,31 @@ jobs:
             const title = 'Upstream APK build failed';
             const runUrl = run.html_url;
 
-            // Retry only the failed job once. A second failure is reported below.
-            if (attempt < 2) {
+            // Do not rebuild an APK that was already published just because release cleanup failed.
+            const jobsResponse = await github.rest.actions.listJobsForWorkflowRun({
+              owner,
+              repo,
+              run_id: run.id,
+              per_page: 100
+            });
+            const failedSteps = jobsResponse.data.jobs.flatMap(job =>
+              (job.steps || [])
+                .filter(step => step.conclusion === 'failure')
+                .map(step => step.name)
+            );
+            const retryableSteps = new Set([
+              'Checkout upstream Lemuroid master',
+              'Set up JDK 17',
+              'Prepare Gradle wrapper',
+              'Create temporary CI signing keystore',
+              'Build upstream Free Dynamic Release APK'
+            ]);
+            const shouldRetry = failedSteps.some(name => retryableSteps.has(name));
+
+            core.notice(`Failed steps: ${failedSteps.join(', ') || 'not reported'}`);
+
+            // Retry a source/build failure once. Publish/cleanup failures are reported without rebuilding.
+            if (attempt < 2 && shouldRetry) {
               try {
                 await github.rest.actions.reRunWorkflowFailedJobs({
                   owner,
