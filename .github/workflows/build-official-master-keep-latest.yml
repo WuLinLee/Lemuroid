@@ -206,8 +206,11 @@ jobs:
             if [ "$tag" = "$keep_tag" ]; then
               continue
             fi
-            echo "Deleting older automated release and tag: $tag"
-            gh release delete "$tag" --yes --cleanup-tag
+            echo "Deleting older automated release: $tag"
+            gh release delete "$tag" --yes
+            # Delete the Git tag through the API. The checkout is the upstream
+            # source repository, not this fork, so local git tag deletion is unsafe.
+            gh api --method DELETE "repos/${GITHUB_REPOSITORY}/git/refs/tags/$tag"
           done
 
           echo "Cleanup complete."
